@@ -56,6 +56,9 @@
         .delete-btn {
             @apply bg-red-500 text-white px-3 py-1 rounded-md text-xs hover:bg-red-600 transition ease-in-out duration-150;
         }
+        .total-expense-display {
+            @apply text-xl font-bold text-gray-800 bg-gray-100 p-4 rounded-lg text-center mb-6;
+        }
         .message-box {
             position: fixed;
             top: 50%;
@@ -112,6 +115,10 @@
         </div>
         <button id="add-expense-btn" class="w-full mb-8">지출 추가</button>
 
+        <div class="total-expense-display">
+            총 지출: <span id="total-expense-amount">0원</span>
+        </div>
+
         <h2 class="text-2xl font-semibold text-gray-800 mb-4">지출 내역</h2>
         <div class="overflow-x-auto rounded-lg shadow-md">
             <table id="expense-table" class="min-w-full">
@@ -147,6 +154,7 @@
         const messageText = document.getElementById('message-text');
         const microphoneBtnDescription = document.getElementById('microphone-btn-description');
         const microphoneBtnAmount = document.getElementById('microphone-btn-amount');
+        const totalExpenseAmountSpan = document.getElementById('total-expense-amount'); // 총 지출 금액 표시 요소
 
         // 지출 내역을 저장할 배열 (초기 데이터)
         // localStorage에서 'expenses' 키로 저장된 데이터를 불러오거나, 없으면 빈 배열로 초기화합니다.
@@ -180,7 +188,7 @@
                     descriptionInput.value = transcript;
                 } else if (targetInput === amountInput) {
                     const parsedAmount = parseKoreanNumber(transcript);
-                    if (!isNaN(parsedAmount) && parsedAmount > 0) {
+                    if (!isNaN(parsedAmount) && parsedAmount >= 0) { // 금액이 0 이상인 경우 허용
                         amountInput.value = parsedAmount;
                         showMessageBox(`인식된 금액: "${parsedAmount.toLocaleString()}원"`);
                     } else {
@@ -259,22 +267,23 @@
                 return num;
             }
 
-            const digitMap = { '일': 1, '이': 2, '삼': 3, '사': 4, '오': 5, '육': 6, '칠': 7, '팔': 8, '구': 9 };
-            const unitMap = { '십': 10, '백': 100, '천': 1000, '만': 10000, '억': 100000000 };
+            const digitMap = { '일': 1, '이': 2, '삼': 3, '사': 4, '오': 5, '육': 6, '칠': 7, '팔': 8, '구': 9, '영': 0 }; // '영' 추가
+            const unitMap = { '십': 10, '백': 100, '천': 1000, '만': 10000, '억': 100000000, '조': 1000000000000 }; // '조' 추가
 
             let total = 0;
-            let currentBlockValue = 0; // "만" 또는 "억" 단위 내의 값 (예: "이천삼백" in "오만 이천삼백")
+            let currentBlockValue = 0; // "만", "억", "조" 단위 내의 값 (예: "이천삼백" in "오만 이천삼백")
             let tempDigit = 0; // 단위 앞에 오는 숫자 (예: '삼' in '삼백')
 
             for (let i = 0; i < text.length; i++) {
                 const char = text[i];
-                if (digitMap[char]) {
+                if (digitMap[char] !== undefined) { // 숫자인 경우
                     tempDigit = digitMap[char];
-                } else if (unitMap[char]) {
+                } else if (unitMap[char]) { // 단위인 경우
                     const unit = unitMap[char];
-                    const value = (tempDigit === 0) ? 1 : tempDigit; // 앞에 숫자가 없으면 1로 간주 (예: "십" -> 10)
+                    // 단위 앞에 숫자가 없으면 1로 간주 (예: "십" -> 10, "만" -> 10000)
+                    const value = (tempDigit === 0) ? 1 : tempDigit;
 
-                    if (unit >= 10000) { // '만', '억' 단위
+                    if (unit >= 10000) { // '만', '억', '조' 단위
                         total += (currentBlockValue + value) * unit;
                         currentBlockValue = 0; // 다음 큰 단위를 위해 블록 초기화
                         tempDigit = 0;
@@ -290,6 +299,7 @@
 
             return total;
         };
+
 
         /**
          * 메시지 상자를 표시하는 함수
@@ -316,6 +326,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             dateInput.value = getCurrentDate();
             renderExpenses(); // 페이지 로드 시 기존 지출 내역 렌더링
+            updateTotalExpense(); // 페이지 로드 시 총 지출 업데이트
         });
 
         /**
@@ -327,8 +338,8 @@
             const date = dateInput.value;
 
             // 입력 유효성 검사
-            if (!description || isNaN(amount) || amount <= 0 || !date) {
-                showMessageBox('모든 필드를 올바르게 입력해주세요. 금액은 양수여야 합니다.');
+            if (!description || isNaN(amount) || amount < 0 || !date) { // 금액이 0 이상인 경우 허용
+                showMessageBox('모든 필드를 올바르게 입력해주세요. 금액은 0 이상이어야 합니다.');
                 return;
             }
 
@@ -342,8 +353,7 @@
 
             // 배열에 지출 추가
             expenses.push(newExpense);
-            // 로컬 스토리지에 현재 expenses 배열을 JSON 문자열로 변환하여 저장합니다.
-            localStorage.setItem('expenses', JSON.stringify(expenses));
+            localStorage.setItem('expenses', JSON.stringify(expenses)); // 로컬 스토리지에 저장
 
             // 입력 필드 초기화
             descriptionInput.value = '';
@@ -352,6 +362,7 @@
 
             // 지출 목록 다시 렌더링
             renderExpenses();
+            updateTotalExpense(); // 지출 추가 후 총 지출 업데이트
             showMessageBox('지출이 성공적으로 추가되었습니다!');
         }
 
@@ -403,12 +414,20 @@
 
             // 해당 ID를 가진 지출을 expenses 배열에서 필터링하여 제거
             expenses = expenses.filter(expense => expense.id !== expenseIdToDelete);
-            // 로컬 스토리지에 업데이트된 expenses 배열을 저장합니다.
-            localStorage.setItem('expenses', JSON.stringify(expenses));
+            localStorage.setItem('expenses', JSON.stringify(expenses)); // 로컬 스토리지 업데이트
 
             // 지출 목록 다시 렌더링
             renderExpenses();
+            updateTotalExpense(); // 지출 삭제 후 총 지출 업데이트
             showMessageBox('지출이 성공적으로 삭제되었습니다.');
+        }
+
+        /**
+         * 총 지출 금액을 계산하고 화면에 업데이트하는 함수
+         */
+        function updateTotalExpense() {
+            const total = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+            totalExpenseAmountSpan.textContent = `${total.toLocaleString()}원`;
         }
 
         // '지출 추가' 버튼에 이벤트 리스너 연결
@@ -417,3 +436,5 @@
     </script>
 </body>
 </html>
+
+
