@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>지출 정리</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome for Microphone Icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Inter 폰트 적용 */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* 회색 배경 */
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* 상단 정렬 */
+            min-height: 100vh;
+            padding: 2rem 1rem; /* 상하 패딩 추가 */
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background-color: #ffffff;
+            padding: 2rem;
+            border-radius: 1rem; /* 둥근 모서리 */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* 부드러운 그림자 */
+        }
+        input[type="text"],
+        input[type="number"],
+        input[type="date"] {
+            @apply w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500;
+        }
+        button {
+            @apply px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition ease-in-out duration-150;
+        }
+        .microphone-button {
+            @apply bg-gray-200 text-gray-700 p-3 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-50 transition ease-in-out duration-150 flex items-center justify-center;
+        }
+        .microphone-button.listening {
+            @apply bg-red-500 text-white animate-pulse; /* 녹음 중일 때 빨간색으로 깜빡임 */
+        }
+        table {
+            @apply w-full text-left border-collapse;
+        }
+        th, td {
+            @apply p-4 border-b border-gray-200;
+        }
+        th {
+            @apply bg-gray-100 text-gray-700 font-semibold uppercase text-sm;
+        }
+        td {
+            @apply text-gray-800;
+        }
+        .delete-btn {
+            @apply bg-red-500 text-white px-3 py-1 rounded-md text-xs hover:bg-red-600 transition ease-in-out duration-150;
+        }
+        .message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            display: none; /* Hidden by default */
+            text-align: center;
+            max-width: 90%;
+            width: 300px;
+        }
+        .message-box button {
+            margin-top: 15px;
+            padding: 8px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-3xl font-bold text-center mb-8 text-gray-800">지출 정리 앱</h1>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="col-span-1">
+                <label for="description" class="block text-sm font-medium text-gray-700 mb-1">설명</label>
+                <div class="flex gap-2">
+                    <input type="text" id="description" placeholder="식사, 교통비 등" class="shadow-sm flex-grow">
+                    <button id="microphone-btn-description" class="microphone-button w-12 h-12">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="col-span-1">
+                <label for="amount" class="block text-sm font-medium text-gray-700 mb-1">금액</label>
+                <div class="flex gap-2">
+                    <input type="number" id="amount" placeholder="예: 15000" class="shadow-sm flex-grow">
+                    <button id="microphone-btn-amount" class="microphone-button w-12 h-12">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="col-span-1">
+                <label for="date" class="block text-sm font-medium text-gray-700 mb-1">날짜</label>
+                <input type="date" id="date" class="shadow-sm">
+            </div>
+        </div>
+        <button id="add-expense-btn" class="w-full mb-8">지출 추가</button>
+
+        <h2 class="text-2xl font-semibold text-gray-800 mb-4">지출 내역</h2>
+        <div class="overflow-x-auto rounded-lg shadow-md">
+            <table id="expense-table" class="min-w-full">
+                <thead>
+                    <tr>
+                        <th>설명</th>
+                        <th>금액</th>
+                        <th>날짜</th>
+                        <th></th> <!-- 삭제 버튼을 위한 빈 헤더 -->
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- 지출 내역이 여기에 동적으로 추가됩니다 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Message Box -->
+    <div id="message-box" class="message-box">
+        <p id="message-text"></p>
+        <button onclick="document.getElementById('message-box').style.display='none'">확인</button>
+    </div>
+
+    <script>
+        // HTML 요소 가져오기
+        const descriptionInput = document.getElementById('description');
+        const amountInput = document.getElementById('amount');
+        const dateInput = document.getElementById('date');
+        const addExpenseBtn = document.getElementById('add-expense-btn');
+        const expenseTableBody = document.querySelector('#expense-table tbody');
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+        const microphoneBtnDescription = document.getElementById('microphone-btn-description');
+        const microphoneBtnAmount = document.getElementById('microphone-btn-amount');
+
+        // 지출 내역을 저장할 배열 (초기 데이터)
+        // localStorage에서 'expenses' 키로 저장된 데이터를 불러오거나, 없으면 빈 배열로 초기화합니다.
+        let expenses = JSON.parse(localStorage.getItem('expenses')) || [];
+
+        // Web Speech API 초기화
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+        let isListening = false;
+        let targetInput = null; // 현재 음성 입력이 들어갈 input 요소
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false; // 한 번의 음성 입력만 처리
+            recognition.lang = 'ko-KR'; // 한국어 설정
+            recognition.interimResults = false; // 중간 결과는 필요 없음
+
+            recognition.onstart = () => {
+                isListening = true;
+                if (targetInput === descriptionInput) {
+                    microphoneBtnDescription.classList.add('listening');
+                } else if (targetInput === amountInput) {
+                    microphoneBtnAmount.classList.add('listening');
+                }
+                showMessageBox('말씀해주세요...');
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                if (targetInput === descriptionInput) {
+                    descriptionInput.value = transcript;
+                } else if (targetInput === amountInput) {
+                    const parsedAmount = parseKoreanNumber(transcript);
+                    if (!isNaN(parsedAmount) && parsedAmount > 0) {
+                        amountInput.value = parsedAmount;
+                        showMessageBox(`인식된 금액: "${parsedAmount.toLocaleString()}원"`);
+                    } else {
+                        amountInput.value = ''; // 유효하지 않으면 초기화
+                        showMessageBox(`금액을 인식할 수 없습니다: "${transcript}". 숫자로 다시 말씀해주세요.`);
+                    }
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.error('음성 인식 오류:', event.error);
+                let errorMessage = '음성 인식 오류가 발생했습니다.';
+                if (event.error === 'no-speech') {
+                    errorMessage = '음성이 감지되지 않았습니다. 다시 시도해주세요.';
+                } else if (event.error === 'not-allowed') {
+                    errorMessage = '마이크 사용 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.';
+                } else if (event.error === 'aborted') {
+                    errorMessage = '음성 인식이 중단되었습니다.';
+                }
+                showMessageBox(errorMessage);
+                isListening = false;
+                microphoneBtnDescription.classList.remove('listening');
+                microphoneBtnAmount.classList.remove('listening');
+            };
+
+            recognition.onend = () => {
+                isListening = false;
+                microphoneBtnDescription.classList.remove('listening');
+                microphoneBtnAmount.classList.remove('listening');
+                targetInput = null; // 타겟 인풋 초기화
+            };
+
+            // 설명 필드 마이크 버튼 클릭 이벤트
+            microphoneBtnDescription.addEventListener('click', () => {
+                if (!isListening) {
+                    targetInput = descriptionInput;
+                    recognition.start();
+                } else {
+                    recognition.stop();
+                }
+            });
+
+            // 금액 필드 마이크 버튼 클릭 이벤트
+            microphoneBtnAmount.addEventListener('click', () => {
+                if (!isListening) {
+                    targetInput = amountInput;
+                    recognition.start();
+                } else {
+                    recognition.stop();
+                }
+            });
+
+        } else {
+            // Web Speech API를 지원하지 않는 경우
+            microphoneBtnDescription.style.display = 'none';
+            microphoneBtnAmount.style.display = 'none';
+            document.addEventListener('DOMContentLoaded', () => {
+                showMessageBox('죄송합니다. 이 브라우저는 음성 인식 기능을 지원하지 않습니다.');
+            });
+        }
+
+        /**
+         * 한국어 숫자 표현을 숫자로 파싱하는 함수
+         * 기본적인 "천", "만", "십", "백" 단위를 포함한 숫자를 파싱합니다.
+         * 예: "만 오천 원" -> 15000, "이천 오백" -> 2500
+         * @param {string} text - 음성으로 인식된 한국어 숫자 텍스트
+         * @returns {number} 파싱된 숫자 또는 NaN
+         */
+        const parseKoreanNumber = (text) => {
+            text = text.replace(/원$/, '').trim(); // "원" 접미사 제거
+            text = text.replace(/\s/g, ''); // 모든 공백 제거
+
+            // 이미 숫자인 경우 직접 파싱
+            let num = parseInt(text, 10);
+            if (!isNaN(num)) {
+                return num;
+            }
+
+            const digitMap = { '일': 1, '이': 2, '삼': 3, '사': 4, '오': 5, '육': 6, '칠': 7, '팔': 8, '구': 9 };
+            const unitMap = { '십': 10, '백': 100, '천': 1000, '만': 10000, '억': 100000000 };
+
+            let total = 0;
+            let currentBlockValue = 0; // "만" 또는 "억" 단위 내의 값 (예: "이천삼백" in "오만 이천삼백")
+            let tempDigit = 0; // 단위 앞에 오는 숫자 (예: '삼' in '삼백')
+
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                if (digitMap[char]) {
+                    tempDigit = digitMap[char];
+                } else if (unitMap[char]) {
+                    const unit = unitMap[char];
+                    const value = (tempDigit === 0) ? 1 : tempDigit; // 앞에 숫자가 없으면 1로 간주 (예: "십" -> 10)
+
+                    if (unit >= 10000) { // '만', '억' 단위
+                        total += (currentBlockValue + value) * unit;
+                        currentBlockValue = 0; // 다음 큰 단위를 위해 블록 초기화
+                        tempDigit = 0;
+                    } else { // '십', '백', '천' 단위
+                        currentBlockValue += value * unit;
+                        tempDigit = 0; // 현재 블록 내의 다음 부분을 위해 초기화
+                    }
+                } else {
+                    // 인식할 수 없는 문자 (무시)
+                }
+            }
+            total += currentBlockValue + tempDigit; // 남은 값 (마지막 블록 또는 단일 숫자) 추가
+
+            return total;
+        };
+
+        /**
+         * 메시지 상자를 표시하는 함수
+         * @param {string} message - 표시할 메시지
+         */
+        function showMessageBox(message) {
+            messageText.textContent = message;
+            messageBox.style.display = 'block';
+        }
+
+        /**
+         * 현재 날짜를 'YYYY-MM-DD' 형식으로 반환하는 함수
+         * @returns {string} 오늘 날짜
+         */
+        function getCurrentDate() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0'); // 월은 0부터 시작하므로 +1
+            const day = String(today.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        // 페이지 로드 시 현재 날짜로 기본 설정
+        document.addEventListener('DOMContentLoaded', () => {
+            dateInput.value = getCurrentDate();
+            renderExpenses(); // 페이지 로드 시 기존 지출 내역 렌더링
+        });
+
+        /**
+         * 새 지출을 추가하는 함수
+         */
+        function addExpense() {
+            const description = descriptionInput.value.trim();
+            const amount = parseFloat(amountInput.value); // 숫자로 변환
+            const date = dateInput.value;
+
+            // 입력 유효성 검사
+            if (!description || isNaN(amount) || amount <= 0 || !date) {
+                showMessageBox('모든 필드를 올바르게 입력해주세요. 금액은 양수여야 합니다.');
+                return;
+            }
+
+            // 새 지출 객체 생성
+            const newExpense = {
+                id: Date.now(), // 고유 ID 생성 (타임스탬프 사용)
+                description: description,
+                amount: amount,
+                date: date
+            };
+
+            // 배열에 지출 추가
+            expenses.push(newExpense);
+            // 로컬 스토리지에 현재 expenses 배열을 JSON 문자열로 변환하여 저장합니다.
+            localStorage.setItem('expenses', JSON.stringify(expenses));
+
+            // 입력 필드 초기화
+            descriptionInput.value = '';
+            amountInput.value = '';
+            dateInput.value = getCurrentDate(); // 날짜는 다시 오늘 날짜로 설정
+
+            // 지출 목록 다시 렌더링
+            renderExpenses();
+            showMessageBox('지출이 성공적으로 추가되었습니다!');
+        }
+
+        /**
+         * 지출 목록을 화면에 렌더링하는 함수
+         */
+        function renderExpenses() {
+            // 기존 목록 비우기
+            expenseTableBody.innerHTML = '';
+
+            // expenses 배열을 날짜 기준 내림차순으로 정렬
+            const sortedExpenses = [...expenses].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            // 각 지출 항목을 테이블에 추가
+            sortedExpenses.forEach((expense, index) => {
+                const row = expenseTableBody.insertRow(); // 새 행 생성
+
+                // 설명 셀
+                const descriptionCell = row.insertCell();
+                descriptionCell.textContent = expense.description;
+
+                // 금액 셀 (원화 형식으로 포맷)
+                const amountCell = row.insertCell();
+                amountCell.textContent = `${expense.amount.toLocaleString()}원`;
+
+                // 날짜 셀
+                const dateCell = row.insertCell();
+                dateCell.textContent = expense.date;
+
+                // 삭제 버튼 셀
+                const deleteCell = row.insertCell();
+                const deleteButton = document.createElement('button');
+                deleteButton.textContent = '삭제';
+                deleteButton.className = 'delete-btn';
+                // 데이터 ID를 버튼에 연결하여 어떤 지출을 삭제할지 식별
+                deleteButton.dataset.id = expense.id;
+                deleteButton.addEventListener('click', handleDeleteExpense);
+                deleteCell.appendChild(deleteButton);
+            });
+        }
+
+        /**
+         * 지출을 삭제하는 함수
+         * @param {Event} event - 클릭 이벤트 객체
+         */
+        function handleDeleteExpense(event) {
+            // 버튼의 data-id 속성에서 지출 ID 가져오기
+            const expenseIdToDelete = parseInt(event.target.dataset.id);
+
+            // 해당 ID를 가진 지출을 expenses 배열에서 필터링하여 제거
+            expenses = expenses.filter(expense => expense.id !== expenseIdToDelete);
+            // 로컬 스토리지에 업데이트된 expenses 배열을 저장합니다.
+            localStorage.setItem('expenses', JSON.stringify(expenses));
+
+            // 지출 목록 다시 렌더링
+            renderExpenses();
+            showMessageBox('지출이 성공적으로 삭제되었습니다.');
+        }
+
+        // '지출 추가' 버튼에 이벤트 리스너 연결
+        addExpenseBtn.addEventListener('click', addExpense);
+
+    </script>
+</body>
+</html>
